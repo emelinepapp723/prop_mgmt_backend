@@ -188,3 +188,119 @@ def create_expense(property_id: int, expense: ExpenseCreate, bq: bigquery.Client
     return {"message": "Expense record created successfully", "expense_id": next_id}
 
 # -----------------------------
+@app.get("/income/{property_id}/year")
+def get_income_by_year(property_id: int, bq: bigquery.Client = Depends(get_bq_client)):
+    query = """
+        SELECT
+            EXTRACT(YEAR FROM date) AS year,
+            SUM(amount) AS total_income
+        FROM `sp26-mgmt.property_mgmt.income`
+        WHERE property_id = @property_id
+        GROUP BY year
+        ORDER BY year
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("property_id", "INT64", property_id)
+        ]
+    )
+
+    try:
+        results = bq.query(query, job_config=job_config).result()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed: {str(e)}"
+        )
+
+    return [dict(row) for row in results]
+
+@app.get("/expenses/{property_id}/category")
+def get_expenses_by_category(property_id: int, bq: bigquery.Client = Depends(get_bq_client)):
+    query = """
+        SELECT
+            category,
+            SUM(amount) AS total_spent
+        FROM `sp26-mgmt.property_mgmt.expenses`
+        WHERE property_id = @property_id
+        GROUP BY category
+        ORDER BY total_spent DESC
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("property_id", "INT64", property_id)
+        ]
+    )
+
+    try:
+        results = bq.query(query, job_config=job_config).result()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed: {str(e)}"
+        )
+
+    return [dict(row) for row in results]
+
+@app.get("/expenses/{property_id}/vendor")
+def get_expenses_by_vendor(property_id: int, bq: bigquery.Client = Depends(get_bq_client)):
+    query = """
+        SELECT
+            vendor,
+            SUM(amount) AS total_spent
+        FROM `sp26-mgmt.property_mgmt.expenses`
+        WHERE property_id = @property_id
+        GROUP BY vendor
+        ORDER BY total_spent DESC
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("property_id", "INT64", property_id)
+        ]
+    )
+
+    try:
+        results = bq.query(query, job_config=job_config).result()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed: {str(e)}"
+        )
+
+    return [dict(row) for row in results]
+
+@app.get("/properties/{property_id}/totals")
+def get_property_totals(property_id: int, bq: bigquery.Client = Depends(get_bq_client)):
+    query = """
+        SELECT
+            p.property_id,
+            p.name,
+            IFNULL(SUM(i.amount), 0) AS total_income,
+            IFNULL(SUM(e.amount), 0) AS total_expenses
+        FROM `sp26-mgmt.property_mgmt.properties` p
+        LEFT JOIN `sp26-mgmt.property_mgmt.income` i
+            ON p.property_id = i.property_id
+        LEFT JOIN `sp26-mgmt.property_mgmt.expenses` e
+            ON p.property_id = e.property_id
+        WHERE p.property_id = @property_id
+        GROUP BY p.property_id, p.name
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("property_id", "INT64", property_id)
+        ]
+    )
+
+    try:
+        results = bq.query(query, job_config=job_config).result()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed: {str(e)}"
+        )
+
+    rows = [dict(row) for row in results]
+    if not rows:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    return rows[0]
